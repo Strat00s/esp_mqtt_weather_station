@@ -142,6 +142,7 @@ void forecastScreen() {
     u8g2.drawStr(txt_start, 20, text);          //print the text
 }
 
+
 void startWifi() {
     Serial.printf("[WiFI] Connecting to: %s\n", ssid.c_str());
     WiFi.mode(WIFI_STA);
@@ -192,6 +193,7 @@ void onMessage(char* topic, byte* payload, unsigned int length) {
         forecast[i].night_temp = (float)(root["daily"][i+1]["temp"]["night"]) - 273.15;
         forecast[i].icon       =         root["daily"][i+1]["weather"][0]["icon"].as<String>();
     }
+    updateStatus("weather update");
 }
 
 void setup() {
@@ -249,7 +251,7 @@ void loop() {
     if (millis() - sync_timer >= MINUTE) {
         sync_timer = millis();
         updateTime();
-        updateStatus("time update");
+        updateStatus("time sync");
     }
 
     //loop and ask if connected

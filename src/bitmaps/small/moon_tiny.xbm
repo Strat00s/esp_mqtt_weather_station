@@ -1,0 +1,4 @@
+#define moon_tiny_width 6
+#define moon_tiny_height 6
+static unsigned char moon_tiny_bits[] = {
+   0x0c, 0x06, 0x03, 0x03, 0x06, 0x0c };
