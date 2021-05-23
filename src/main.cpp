@@ -37,18 +37,17 @@ typedef struct {
 
 /*----(CONSTANTS)----*/
 //EDIT HERE with your information
-const String ssid        = "Konrad_2.4GHz";
-const String passw       = "FD053449D3";
-const String mqtt_addr   = "192.168.1.176";
-const String ntp_addr    = "192.168.1.1";
-const String city        = "Horoměřice";
-const String device_name = "WeatherBug";
+const String ssid        = "***********";
+const String passw       = "***********";
+const String mqtt_addr   = "x.x.x.x";
+const String ntp_addr    = "x.x.x.x";
+const String city        = "Random City";
+const String device_name = "Device name";
 
 /*----(VARIABLES)----*/
 //init
 //EDIT HERE for your specific 128x64 configuration
 U8G2_ST7920_128X64_F_HW_SPI u8g2(U8G2_R2, 15, 16);  //LCD config
-//U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R2, 2, 0, U8X8_PIN_NONE);
 WiFiClient espClient;                               //create wificlient
 PubSubClient client(espClient);                     //setup mqtt client
 WiFiUDP ntpUDP;                                     //create wifiudp
@@ -57,8 +56,8 @@ Adafruit_AM2320 am2320 = Adafruit_AM2320();         //am2320 sensor
 
 //weekdays for time screen and forecast
 //EDIT HERE for your language
-char days_of_week[7][10] = {"Neděle", "Pondělí", "Úterý", "Středa", "Čtvrtek", "Pátek", "Sobota"};
-char days_of_week_short[7][4] = {"NE", "PO", "UT", "ST", "CT", "PA", "SO"};
+char days_of_week[7][10] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+char days_of_week_short[7][4] = {"SU", "MO", "TU", "WE", "TH", "FR", "SA"};
 
 bool startup = true;    //startup bool
 
