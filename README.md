@@ -1,14 +1,18 @@
 ## Simple MQTT ESP8266 weather station
 
-MQTT for getting weather data (in openweathermap style json)
+MQTT [PubSubClient library](https://github.com/knolleary/pubsubclient) for getting weather data (in openweathermap style json)
 
-u8g2 library for LCD (currently with 128x64 ST7920)
+[ArduinoJson library](https://github.com/bblanchon/ArduinoJson) for data parsing
 
-Adafruit AM2320 library for inside temperature sensor
+[u8g2 library](https://github.com/olikraus/u8g2) for LCD (currently with 128x64 ST7920)
+
+[Adafruit AM2320 library](https://github.com/adafruit/Adafruit_AM2320) for inside temperature sensor
 
 ArduinoOTA for simple updates
 
-Made with platformio
+[Modified NTP library](https://github.com/taranais/NTPClient) by taranais for easier date acces
+
+Made using [platformio](https://platformio.org/)
 
 ### MQTT
 By default subscribes to `weather/'city'`, where it expects your where data to be. 
