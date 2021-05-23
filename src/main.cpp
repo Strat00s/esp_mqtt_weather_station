@@ -83,26 +83,39 @@ void drawCenteredString(char * text, int y) {
 /*----(OTA)----*/
 void onStart() {
     u8g2.clearBuffer();
-    //drawCenteredString("test", 30);
-    //u8g2.sendBuffer();
+    u8g2.setFont(u8g2_font_6x12_te);                //set update font
+    drawCenteredString("Update in progress", 16);   //print update message
+    u8g2.setFontMode(1);                            //set font mode (transparency)
 }
 
 void onProgress(size_t progress, size_t total) {
-    int bar_width = 50;
-    int bar_height = 6;
+    int bar_width = 100;
+    int bar_height = 9;
     int actual_progress = progress / (total / bar_width);
+    char buf[3];
+    itoa(actual_progress, buf, 10);
     int offset = (LCD_WIDTH - bar_width) / 2;
-    u8g2.drawFrame(offset - 2, 29, bar_width + 4, bar_height + 4);
-    u8g2.drawBox(offset, 31, actual_progress, bar_height);
+    
+    //draw bar
+    u8g2.setDrawColor(1);
+    u8g2.drawFrame(offset - 2, 28, bar_width + 4, bar_height + 4);
+    u8g2.drawBox(offset, 30, actual_progress, bar_height);
+    u8g2.setDrawColor(0);
+    u8g2.drawBox(offset + actual_progress, 30, bar_width - actual_progress, bar_height);
+    u8g2.setDrawColor(2);
+    drawCenteredString(buf, 38);
+    
     u8g2.sendBuffer();
 }
 
 void onEnd() {
-
+    drawCenteredString("Done", 56);   //print failed message
+    u8g2.sendBuffer();
 }
 
 void onError(ota_error_t error) {
-
+    drawCenteredString("Failed", 56);   //print failed message
+    u8g2.sendBuffer();
 }
 
 
