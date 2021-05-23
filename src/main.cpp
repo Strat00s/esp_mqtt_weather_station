@@ -1,19 +1,14 @@
 /*----(LIBRARIES)----*/
-#include <esp8266httpclient.h>
-//time
-#include <WiFiUdp.h>
-#include <NTPClient.h>
-//mqtt and data
-#include <ESP8266WiFi.h>
-#include <PubSubClient.h>
-#include <ArduinoJson.h>
-//lcd
-#include <U8g2lib.h>
-//sensor
-#include <Adafruit_Sensor.h>
+#include <WiFiUdp.h>            //esp udp client
+#include <NTPClient.h>          //ntp client
+#include <ESP8266WiFi.h>        //esp wifi client
+#include <PubSubClient.h>       //mqqt client
+#include <ArduinoJson.h>        //json parsing for weather data
+#include <U8g2lib.h>            //lcd
+#include <Adafruit_Sensor.h>    //sensor
 #include <Adafruit_AM2320.h>
-//Icons
-#include "weather_icons.h"
+#include <ArduinoOTA.h>         //OTA
+#include "weather_icons.h"      //icons
 
 /*----(MACROS)----*/
 #define SECOND 1000
@@ -24,12 +19,11 @@
 
 #define LCD_WIDTH 128
 #define LCD_HEIGHT 64
-
 #define LCD_CLEAR_AREA(x, y, w, h) u8g2.setDrawColor(0);\
                                    u8g2.drawBox(x, y, w, h);\
                                    u8g2.setDrawColor(1)\
 
-/*----(PROTOTYPES)----*/
+/*----(STRUCT)----*/
 typedef struct {
     float day_temp = 0.0;
     float night_temp = 0.0;
@@ -42,51 +36,82 @@ typedef struct {
 } DayData;
 
 /*----(CONSTANTS)----*/
-const String ssid = "Konrad_2.4GHz";
-const String passw = "FD053449D3";
-const String mqtt_addr = "192.168.1.176";
-const String ntp_addr = "192.168.1.1";
-const String city = "Horoměřice";
+//EDIT HERE with your information
+const String ssid        = "Konrad_2.4GHz";
+const String passw       = "FD053449D3";
+const String mqtt_addr   = "192.168.1.176";
+const String ntp_addr    = "192.168.1.1";
+const String city        = "Horoměřice";
 const String device_name = "WeatherBug";
 
 /*----(VARIABLES)----*/
 //init
+//EDIT HERE for your specific 128x64 configuration
+U8G2_ST7920_128X64_F_HW_SPI u8g2(U8G2_R2, 15, 16);  //LCD config
+//U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R2, 2, 0, U8X8_PIN_NONE);
 WiFiClient espClient;                               //create wificlient
 PubSubClient client(espClient);                     //setup mqtt client
 WiFiUDP ntpUDP;                                     //create wifiudp
 NTPClient time_client(ntpUDP, ntp_addr.c_str());    //setup time client width server on 192.168.1.1
-U8G2_ST7920_128X64_F_HW_SPI u8g2(U8G2_R2, 15, 16);  //LCD config
 Adafruit_AM2320 am2320 = Adafruit_AM2320();         //am2320 sensor
 
 //weekdays for time screen and forecast
+//EDIT HERE for your language
 char days_of_week[7][10] = {"Neděle", "Pondělí", "Úterý", "Středa", "Čtvrtek", "Pátek", "Sobota"};
 char days_of_week_short[7][4] = {"NE", "PO", "UT", "ST", "CT", "PA", "SO"};
 
 bool startup = true;    //startup bool
 
 DayData curr_day;       //current day data storage
-DayData forecast[4];    //next 4 days forecast
+DayData forecast[3];    //next 4 days forecast
 float inside_temp;      //inside temperature
 
-int screen = 0;         //current screen to show
+int screen = 0; //current screen to show
 
 //timers
 unsigned long screen_timer = 0;
 unsigned long footer_timer = 0;
 unsigned long sync_timer = 0;
 
+/*----(HELPER FUNCTIONS)----*/
+void drawCenteredString(char * text, int y) {
+    int width = u8g2.getStrWidth(text);
+    width = LCD_WIDTH/2 - width/2;
+    u8g2.drawStr(width, y, text);
+}
+
+/*----(OTA)----*/
+void onStart() {
+    u8g2.clearBuffer();
+    //drawCenteredString("test", 30);
+    //u8g2.sendBuffer();
+}
+
+void onProgress(size_t progress, size_t total) {
+    int bar_width = 50;
+    int bar_height = 6;
+    int actual_progress = progress / (total / bar_width);
+    int offset = (LCD_WIDTH - bar_width) / 2;
+    u8g2.drawFrame(offset - 2, 29, bar_width + 4, bar_height + 4);
+    u8g2.drawBox(offset, 31, actual_progress, bar_height);
+    u8g2.sendBuffer();
+}
+
+void onEnd() {
+
+}
+
+void onError(ota_error_t error) {
+
+}
 
 
-//LCD printing
+/*----(UI ELEMENTS)----*/
 void bubbleAnimation(int current_bubble, int min, int max, int location, int spread, char *text){
     LCD_CLEAR_AREA(LCD_WIDTH/2 - (spread+max+1), location - max, (spread+max+1)*2, (max+1)*2);  //clear area
 
     //center text (if there is any)
-    if (text != NULL){
-        int txt_width = u8g2.getStrWidth(text);     //get text width
-        int txt_start = LCD_WIDTH/2 - txt_width/2;  //lcd width/2 - text width/2 -> where we should start to print
-        u8g2.drawStr(txt_start, 20, text);          //print the text
-    }
+    if (text != NULL) drawCenteredString(text, 20);
 
     //draw animation animation (center bubble centered)
     switch ((current_bubble) % 3){
@@ -110,11 +135,14 @@ void bubbleAnimation(int current_bubble, int min, int max, int location, int spr
 
 void footer(){
     static bool separator = true;
+    
     //clear footer area
     LCD_CLEAR_AREA(0, 55, 30, 9);           //time
     LCD_CLEAR_AREA(98, 55, 30, 9);           //temp
+    
     u8g2.setFont(u8g2_font_profont11_tf);   //set font
     u8g2.drawHLine(0, 54, 128);             //draw horizontal line (start x, y, width)
+    
     //time
     u8g2.setCursor(2, 64);                          //move cursor to time
     u8g2.printf("%02d", time_client.getHours());    //print hours
@@ -123,6 +151,7 @@ void footer(){
     u8g2.setCursor(13, 63);
     if (separator) u8g2.printf(":");                //print separator every other call
     separator = !separator;                         //flip separator
+    
     //temp
     u8g2.setCursor(91, 64);                         //move cursor to temp
     u8g2.printf("%02.1f\xb0%c", inside_temp, 'C');    //print temperature
@@ -130,32 +159,27 @@ void footer(){
 
 void timeScreen() {
     LCD_CLEAR_AREA(0, 0, 128, 54);  //clear screen part 
+    
     //variables
     char tmp[10];
-    int txt_width;
-    int start_width;
     String day =   time_client.getFormattedDate().substring(8, 10);
     String month = time_client.getFormattedDate().substring(5, 7);
     String year =  time_client.getFormattedDate().substring(0, 4);
+    
     //weekday
     u8g2.setFont(u8g2_font_6x12_te);                        //set font (for diacritics)
     sprintf(tmp, "%s", days_of_week[time_client.getDay()]); //get weekday from array
-    txt_width = u8g2.getStrWidth(tmp);                      //get text width
-    start_width = LCD_WIDTH/2 - txt_width/2;                //get center
-    u8g2.drawUTF8(start_width, 12, tmp);                    //print day in center (UTF!!!)
+    drawCenteredString(tmp, 12);
+    
     //date
     u8g2.setFont(u8g2_font_profont15_tr);
     sprintf(tmp, "%s.%s.%s", day.c_str(), month.c_str(), year.c_str());
-    txt_width = u8g2.getStrWidth(tmp);
-    start_width = LCD_WIDTH/2 - txt_width/2;
-    u8g2.drawStr(start_width, 26, tmp);
+    drawCenteredString(tmp, 26);
 
     //time
     u8g2.setFont(u8g2_font_profont22_tr);
     sprintf(tmp, "%s", time_client.getFormattedTime().c_str());
-    txt_width = u8g2.getStrWidth(tmp);
-    start_width = LCD_WIDTH/2 - txt_width/2;
-    u8g2.drawStr(start_width, 46, tmp);
+    drawCenteredString(tmp, 46);
 }
 
 void weatherScreen() {
@@ -165,7 +189,6 @@ void weatherScreen() {
     //get correct bitmap
     bool day = (curr_day.icon[2] == 'd') ? true : false;    //get the icon letter (night or day)
     int type = curr_day.icon.substring(0, 2).toInt();   //convert icon number from string to int
-    Serial.printf("Icon: %s Day: %d type: %d\n", curr_day.icon.c_str(), day, type);
 
     //draw the bitmap (64x42)
     switch (type){
@@ -186,24 +209,29 @@ void weatherScreen() {
     sprintf(tmp, "%.1f\xb0", curr_day.temp);
     int txt_start = 54/2 - u8g2.getStrWidth(tmp)/2;
     u8g2.drawStr(txt_start, 53, tmp);
+
     //humidity
     u8g2.setFont(u8g2_font_profont11_tf);
     sprintf(tmp, "%d%%", curr_day.humidity);
     u8g2.drawXBM(58, 12, 11, 12, humidity2_bits);
     u8g2.drawStr(75, 22, tmp);
+
     //pressure
     sprintf(tmp, "%.3fbar", curr_day.pressure);
     u8g2.drawXBM(56, 28, 15, 7, pressure2_bits);
     u8g2.drawStr(75, 36, tmp);
+
     //wind speed
     sprintf(tmp, "%.1fm/s", curr_day.wind_speed);
     u8g2.drawXBM(58, 40, 11, 11, speed_bits);
     u8g2.drawStr(75, 50, tmp);
+
     //city name and gps icon
     u8g2.setFont(u8g2_font_open_iconic_www_1x_t);
     u8g2.drawStr(56, 9, "\x47");
     u8g2.setFont(u8g2_font_6x12_te);
     u8g2.drawUTF8(65, 8, city.c_str());
+
     //draw lines
     u8g2.drawVLine(54, 0, 54);
     u8g2.drawHLine(54, 10, 74);
@@ -211,15 +239,13 @@ void weatherScreen() {
 
 void forecastScreen() {
     LCD_CLEAR_AREA(0, 0, 128, 54);
-     char tmp[10];
+    char tmp[10];
 
-    //u8g2.setFont(u8g2_font_6x12_te);
     u8g2.setFont(u8g2_font_profont10_tf);
 
     for (int i = 0; i < LEN(forecast); i++){
-        bool day = forecast[i].icon[2];    //get the icon letter (night or day)
-        int type = forecast[i].icon.substring(0, 2).toInt();   //convert icon number from string to int
-        Serial.printf("Icon: %s Day: %d type: %d\n", forecast[i].icon.c_str(), day, type);
+        bool day = forecast[i].icon[2];                         //get the icon letter (night or day)
+        int type = forecast[i].icon.substring(0, 2).toInt();    //convert icon number from string to int
 
         int column_offset = (i % 3) * (43);
         u8g2.drawStr(column_offset + 16, 6, days_of_week_short[(time_client.getDay() + i + 1) % 7]);
@@ -252,37 +278,28 @@ void forecastScreen() {
 
 
 void startWifi() {
-    Serial.printf("[WiFI] Connecting to: %s\n", ssid.c_str());
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid.c_str(), passw.c_str());
     int timer = 0;
     while(WiFi.status() != WL_CONNECTED) {
-        bubbleAnimation(timer, 2, 5, 40, 18, "Connecting to WiFi"); //run bubble animation
-        u8g2.sendBuffer();                                      //write it to screen
-        timer++;                                                //increase timeout
-        delay(500);                                             //delay
-        if (timer >= 20) ESP.restart();                         //reset after 10 seconds
+        bubbleAnimation(timer, 2, 5, 40, 18, "Connecting to WiFi"); //run animation
+        u8g2.sendBuffer();                                          //write it to screen
+        timer++;                                                    //increase timeout
+        delay(500);                                                 //delay
+        if (timer >= 20) ESP.restart();                             //reset after 10 seconds
     }
 }
 
-//TODO change
-void updateTime() {
-    time_client.forceUpdate();
-    Serial.printf("[NTP] Time update: %s\n", time_client.getFormattedTime().c_str());
-}
-
-//TODO change
+//Send status update
 void updateStatus(String status) {
     client.publish(("devices/" + device_name).c_str(), (time_client.getFormattedTime() + " " + status).c_str(), true);
 }
 
+/*----(MQTT)----*/
 //update weather data on new message (as we are listening on single topic)
 void onMessage(char* topic, byte* payload, unsigned int length) {
-    if (String(topic) != String("weather/Horoměřice")) return;
+    if (String(topic) != String("weather/" + city)) return;  //skip if not our city
 
-    Serial.printf("%s ", time_client.getFormattedTime().c_str());
-    Serial.printf("[MQTT] Got message on topic '%s':\n", topic);
-    
     //get data as json
     DynamicJsonDocument doc(6144);
     deserializeJson(doc, payload);
@@ -303,38 +320,42 @@ void onMessage(char* topic, byte* payload, unsigned int length) {
         forecast[i].uvi        = (float)(root["daily"][i+1]["uvi"]);
         forecast[i].icon       =         root["daily"][i+1]["weather"][0]["icon"].as<String>();
     }
-    updateStatus("weather update");
+
+    updateStatus("weather update"); //update status
 }
 
+/*----(SETUP)----*/
 void setup() {
-    delay(500);
+    delay(500); //wait just because
+
     //LCD
-    u8g2.begin();
-    u8g2.setFont(u8g2_font_bitcasual_tr);
+    u8g2.begin();                           //init lcd
+    u8g2.setFont(u8g2_font_bitcasual_tr);   //set starting font
+    //Wire.begin(0, 2);                       //for esp-01 when i2c is taken by sensor
 
     //AM2320 sensor
-    am2320.begin();                 //initialize am2320
-
-    //serial
-    Serial.begin(115200);                       //start serial monitor
+    am2320.begin(); //initialize am2320
 
     //wifi
-    startWifi();                                //connect to wifi
+    startWifi();    //connect to wifi
 
     //mqtt
     client.setServer(mqtt_addr.c_str(), 1883);  //set mqtt server
-    client.setBufferSize(8192);                 //set buffer to 8kb for weather data
+    client.setBufferSize(8192);                 //set buffer for weather data
     client.setCallback(onMessage);              //set message callback
-    
-    //NTP
-    time_client.begin();                        //start ntp
-    time_client.setTimeOffset(7200);            //set offset
-    delay(500);                                //wait because reasons
-    updateTime();                               //update time from ntp server
 
-    u8g2.clearBuffer();                         //clear buffer before starting
-    footer();
-    u8g2.sendBuffer();
+    //NTP
+    time_client.begin();                //start ntp
+    time_client.setTimeOffset(7200);    //set offset
+    delay(500);                         //wait because reasons
+    time_client.forceUpdate();          //update time from ntp server
+
+    //OTA
+    ArduinoOTA.begin(); //init ota
+    ArduinoOTA.onStart(onStart);
+    ArduinoOTA.onProgress(onProgress);
+    ArduinoOTA.onEnd(onEnd);
+    ArduinoOTA.onError(onError);
 }
 
 void loop() {
@@ -342,7 +363,9 @@ void loop() {
     //update footer every second
     if (millis() - footer_timer >= SECOND) {
         footer_timer = millis();
-        inside_temp = am2320.readTemperature()*0.95;    //read temperature
+        //EDIT HERE - inside temperature sensor "calibration"
+        inside_temp = am2320.readTemperature() * 0.95;    //read temperature
+        //inside_temp = am2320.readTemperature() * 0.8472;  //
         footer();                                       //update footer
         u8g2.sendBuffer();                              //print it
     }
@@ -350,58 +373,52 @@ void loop() {
     //change screen every x seconds
     if (millis() - screen_timer >= SECOND*4) {
         screen_timer = millis();
+
+        //select screen
         switch (screen) {
             case 0: timeScreen();     break;
             case 1: weatherScreen();  break;
             case 2: forecastScreen(); break;
         }
-        //footer();
-        bubbleAnimation(screen, 1, 2, 59, 12, NULL);
-        screen++;
-        if (screen > 2) screen = 0;
-        u8g2.sendBuffer();
+
+        bubbleAnimation(screen, 1, 2, 59, 12, NULL);    //change animation
+        screen++;                                       //go to next screen
+        if (screen > 2) screen = 0;                     //reset screen if above limit
+        u8g2.sendBuffer();                              //draw display
     }
 
     //sync time every minute
     if (millis() - sync_timer >= MINUTE) {
         sync_timer = millis();
-        updateTime();
-        updateStatus("time sync");
+        time_client.forceUpdate();  //update time
+        updateStatus("time sync");  //update status
     }
 
     //loop and ask if connected
     if(!client.loop()) {
-        Serial.printf("%s ", time_client.getFormattedTime().c_str());
-        Serial.printf("[MQTT] Trying to connect... ");
-        if (client.connect(device_name.c_str())) {
-            Serial.printf("connected\n");
-            //subscribe to topics we want/need
-            client.subscribe(("weather/" + city).c_str());
-        }
-        else {
-            Serial.printf("failed (%d). Retrying in 2 seconds\n", client.state());
-            delay(2000);
-        }
+        //subscribe to required topic on connect
+        if (client.connect(device_name.c_str())) client.subscribe(("weather/" + city).c_str());
+        //else retry in 2 seconds
+        else delay(2000);
     }
     
+    //send device info on startup
     if (startup) {
         startup = false;
-        Serial.printf("%s ", time_client.getFormattedTime().c_str());
-        Serial.printf("[ESP] Uploading device information\n");
+
         //publish device info
         client.publish(("devices/" + device_name + "/ip").c_str(), WiFi.localIP().toString().c_str(), true);
         client.publish(("devices/" + device_name + "/connected").c_str(), time_client.getFormattedTime().c_str(), true);
-        //publish weather request topic
-        client.publish(("weather/requests/" + city).c_str(), "1", true);
-        updateStatus("connected");
+
+        client.publish(("weather/requests/" + city).c_str(), "1", true);    //publish weather request
+        updateStatus("connected");                                          //update status
     }
 
     //try to reconnect if disconnected
     if (!WiFi.isConnected()) {
-        Serial.printf("%s ", time_client.getFormattedTime().c_str());
-        Serial.printf("[WiFi] Disconnected\n");
-        startWifi();
-        //update device data
-        startup = true;
+        startWifi();    //reconnect
+        startup = true; //update device data
     }
+
+    ArduinoOTA.handle();    //run ota
 }
