@@ -8,6 +8,8 @@ Adafruit AM2320 library for inside temperature sensor
 
 ArduinoOTA for simple updates
 
+Made with platformio
+
 ### MQTT
 By default subscribes to `weather/'city'`, where it expects your where data to be. 
 
