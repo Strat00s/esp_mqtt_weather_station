@@ -181,7 +181,9 @@ void timeScreen() {
     //weekday
     u8g2.setFont(u8g2_font_6x12_te);                        //set font (for diacritics)
     sprintf(tmp, "%s", days_of_week[time_client.getDay()]); //get weekday from array
-    drawCenteredString(tmp, 12);
+    int width = u8g2.getStrWidth(tmp);
+    width = LCD_WIDTH/2 - width/2;
+    u8g2.drawUTF8(width, 12, tmp);
     
     //date
     u8g2.setFont(u8g2_font_profont15_tr);
@@ -375,8 +377,9 @@ void loop() {
     //update footer every second
     if (millis() - footer_timer >= SECOND) {
         footer_timer = millis();
+        if (screen == 1) timeScreen();                  //update time screen
         //EDIT HERE - inside temperature sensor "calibration"
-        inside_temp = am2320.readTemperature() * 0.95;    //read temperature
+        inside_temp = am2320.readTemperature() * 0.95;  //read temperature
         footer();                                       //update footer
         u8g2.sendBuffer();                              //print it
     }
