@@ -377,7 +377,6 @@ void loop() {
         footer_timer = millis();
         //EDIT HERE - inside temperature sensor "calibration"
         inside_temp = am2320.readTemperature() * 0.95;    //read temperature
-        //inside_temp = am2320.readTemperature() * 0.8472;  //
         footer();                                       //update footer
         u8g2.sendBuffer();                              //print it
     }
